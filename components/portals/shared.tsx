@@ -46,6 +46,7 @@ export interface PortalCtx {
   portalId:    string
   isPreview:   boolean
   companyName: string
+  link?:       string
 }
 
 /** Cabeçalho — fica sobre o fundo colorido (primaryColor), então texto sempre branco */

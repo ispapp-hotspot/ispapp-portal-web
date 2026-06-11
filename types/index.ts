@@ -13,6 +13,9 @@ export interface PortalConfig {
   showPhone?:      boolean
   paymentMock?:    boolean
   showSuspendedInvoice?: boolean
+  bandwidthUp?:    number
+  bandwidthDown?:  number
+  durationMin?:    number
   [key: string]:   unknown
 }
 

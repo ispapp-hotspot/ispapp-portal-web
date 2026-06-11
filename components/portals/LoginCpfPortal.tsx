@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { CaptivePortal } from '@/types'
 import type { PortalCtx } from './shared'
 import { PortalWrapper, PortalCard, PortalInput, PortalButton, PortalSuccess, formatCpf } from './shared'
+import { grantAndRedirect } from '@/lib/hotspot'
 
 export default function LoginCpfPortal({ portal, ctx }: { portal: CaptivePortal; ctx: PortalCtx }) {
   const [cpf,   setCpf]   = useState('')
@@ -17,9 +18,14 @@ export default function LoginCpfPortal({ portal, ctx }: { portal: CaptivePortal;
     const digits = cpf.replace(/\D/g, '')
     if (digits.length !== 11) { setError('CPF inválido.'); return }
     setError(''); setLoading(true)
-    await new Promise(r => setTimeout(r, 800)) // simula validação
+    try {
+      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+    } catch {
+      setError('Erro ao conectar. Tente novamente.')
+      setLoading(false)
+      return
+    }
     setLoading(false)
-    if (ctx.isPreview) { setDone(true); return }
     setDone(true)
   }
 

@@ -4,12 +4,12 @@ import PortalWithCampaign from '@/components/PortalWithCampaign'
 
 interface Props {
   params:       Promise<{ companyId: string; portalId: string }>
-  searchParams: Promise<{ mac?: string; ip?: string; preview?: string }>
+  searchParams: Promise<{ mac?: string; ip?: string; preview?: string; link?: string }>
 }
 
 export default async function PortalPage({ params, searchParams }: Props) {
   const { companyId, portalId } = await params
-  const { mac = 'AA:BB:CC:DD:EE:FF', ip = '192.168.1.100', preview } = await searchParams
+  const { mac = 'AA:BB:CC:DD:EE:FF', ip = '192.168.1.100', preview, link } = await searchParams
 
   const [portal, company, campaign] = await Promise.all([
     getPortal(portalId),
@@ -35,6 +35,7 @@ export default async function PortalPage({ params, searchParams }: Props) {
       portalId={portalId}
       mac={mac}
       ip={ip}
+      link={link}
       isPreview={isPreview}
       pageBg={pageBg}
       plans={plans}

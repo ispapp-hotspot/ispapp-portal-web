@@ -5,9 +5,10 @@ import type { CaptivePortal, HotspotPlan } from '@/types'
 import type { PortalCtx } from './shared'
 import {
   PortalWrapper, PortalCard, PortalInput, PortalButton, PortalSuccess,
-  PortalGenderSelect, formatCpfCnpj, formatPhone, validateEmail,
+  PortalGenderSelect, formatCpf, formatCpfCnpj, formatPhone, validateEmail,
 } from './shared'
 import { ispLogin, submitLead, redeemVoucher, useFreePlan, initiatePayment, checkPaymentStatus, type IspInvoice, type InitiatePaymentResult } from '@/lib/api'
+import { grantAndRedirect } from '@/lib/hotspot'
 
 type Step = 'choose' | 'client' | 'lead' | 'plans' | 'payment' | 'voucher'
 
@@ -72,6 +73,7 @@ export default function IspLoginPortal({ portal, ctx, plans = [] }: { portal: Ca
     const timer = setTimeout(async () => {
       const { status } = await checkPaymentStatus(paymentResult.transactionId)
       if (status === 'approved' || status === 'manual_approved') {
+        await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
         setDone(true)
       } else {
         setPollingCount(c => c + 1)
@@ -115,8 +117,10 @@ export default function IspLoginPortal({ portal, ctx, plans = [] }: { portal: Ca
               setPlanLoading(true)
               const result = await useFreePlan(ctx.portalId, { planId: p.id, macAddress: ctx.mac, ipAddress: ctx.ip })
               setPlanLoading(false)
-              if (result.granted) { setDone(true) }
-              else { setPlanError(result.error ?? 'Não foi possível liberar o acesso.') }
+              if (result.granted) {
+                await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+                setDone(true)
+              } else { setPlanError(result.error ?? 'Não foi possível liberar o acesso.') }
             }}
               style={{ width: '100%', backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: 16, textAlign: 'left', border: `2px solid ${p.isFree ? '#10b981' : 'transparent'}`, cursor: 'pointer' }}
             >
@@ -321,7 +325,7 @@ export default function IspLoginPortal({ portal, ctx, plans = [] }: { portal: Ca
     <>
       {step === 'choose'  && <ChooseStep portal={portal} ctx={ctx} onChoose={setStep} />}
       {step === 'client'  && <ClientStep portal={portal} ctx={ctx} onBack={() => setStep('choose')} />}
-      {step === 'lead'    && <LeadStep   portal={portal} ctx={ctx} onBack={() => setStep('choose')} onDone={(name, email, phone) => { setLeadName(name); setLeadEmail(email ?? ''); setLeadPhone(phone ?? ''); setStep('plans') }} />}
+      {step === 'lead'    && <LeadStep   portal={portal} ctx={ctx} onBack={() => setStep('choose')} onDone={(name, email, phone, cpf) => { setLeadName(name); setLeadEmail(email ?? ''); setLeadPhone(phone ?? ''); setLeadCpf(cpf ?? ''); setStep('plans') }} />}
     </>
   )
 }
@@ -419,6 +423,7 @@ function ClientStep({
     setLoading(false)
 
     if (result.granted) {
+      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
       setDone(true)
     } else if (result.suspended) {
       setDigits(d)
@@ -529,8 +534,11 @@ function SuspendedInvoiceStep({
       if (countdownRef.current <= 0) {
         countdownRef.current = POLL_INTERVAL
         setCountdown(POLL_INTERVAL)
-        ispLogin(ctx.portalId, { cpf, macAddress: ctx.mac, ipAddress: ctx.ip }).then(result => {
-          if (result.granted) onGrantedRef.current()
+        ispLogin(ctx.portalId, { cpf, macAddress: ctx.mac, ipAddress: ctx.ip }).then(async result => {
+          if (result.granted) {
+            await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+            onGrantedRef.current()
+          }
         })
       }
     }, 1000)
@@ -674,8 +682,9 @@ function SuspendedInvoiceStep({
 
 function LeadStep({
   portal, ctx, onBack, onDone,
-}: { portal: CaptivePortal; ctx: PortalCtx; onBack: () => void; onDone: (name: string, email?: string, phone?: string) => void }) {
+}: { portal: CaptivePortal; ctx: PortalCtx; onBack: () => void; onDone: (name: string, email?: string, phone?: string, cpf?: string) => void }) {
   const [name,   setName]   = useState('')
+  const [cpf,    setCpf]    = useState('')
   const [email,  setEmail]  = useState('')
   const [phone,  setPhone]  = useState('')
   const [gender, setGender] = useState('')
@@ -693,6 +702,7 @@ function LeadStep({
 
     await submitLead(ctx.portalId, {
       name:       name.trim(),
+      cpf:        cpf.trim() || undefined,
       email:      email.trim() || undefined,
       phone:      phone.trim() || undefined,
       gender:     gender || undefined,
@@ -700,7 +710,7 @@ function LeadStep({
       ipAddress:  ctx.ip,
     })
     setLoading(false)
-    onDone(name.trim(), email.trim() || undefined, phone.trim() || undefined)
+    onDone(name.trim(), email.trim() || undefined, phone.trim() || undefined, cpf.trim() || undefined)
   }
 
   return (
@@ -726,6 +736,14 @@ function LeadStep({
           onChange={setName}
           required
           icon={<UserIcon />}
+        />
+        <PortalInput
+          label="CPF"
+          placeholder="000.000.000-00"
+          inputMode="numeric"
+          value={cpf}
+          onChange={v => setCpf(formatCpf(v))}
+          icon={<IdIcon />}
         />
         <PortalInput
           label="E-mail"
@@ -789,6 +807,7 @@ function VoucherStep({
     setLoading(false)
 
     if (result.granted) {
+      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
       onGranted()
     } else {
       setError(result.error ?? 'Voucher inválido ou já utilizado.')
@@ -886,6 +905,10 @@ function ContractIcon() {
       <line x1="16" y1="17" x2="8" y2="17"/>
     </svg>
   )
+}
+
+function IdIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 10h2m-2 4h2M6 10h6m-6 4h3"/></svg>
 }
 
 function UserIcon() {

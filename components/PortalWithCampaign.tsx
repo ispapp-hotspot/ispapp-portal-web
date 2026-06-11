@@ -18,17 +18,18 @@ interface Props {
   portalId:    string
   mac:         string
   ip:          string
+  link?:       string
   isPreview:   boolean
   pageBg:      string
   plans?:      HotspotPlan[]
 }
 
 export default function PortalWithCampaign({
-  portal, campaign, companyName, companyId, portalId, mac, ip, isPreview, pageBg, plans = [],
+  portal, campaign, companyName, companyId, portalId, mac, ip, link, isPreview, pageBg, plans = [],
 }: Props) {
   const [showPortal, setShowPortal] = useState(!campaign || campaign.media.length === 0)
 
-  const ctx: PortalCtx = { mac, ip, companyId, portalId, isPreview, companyName }
+  const ctx: PortalCtx = { mac, ip, companyId, portalId, isPreview, companyName, link }
 
   if (!showPortal && campaign && campaign.media.length > 0) {
     return (

@@ -5,6 +5,7 @@ import type { CaptivePortal } from '@/types'
 import type { PortalCtx } from './shared'
 import { PortalWrapper, PortalCard, PortalInput, PortalButton, PortalSuccess, PortalGenderSelect, formatCpf, formatPhone, validateEmail } from './shared'
 import { submitLead } from '@/lib/api'
+import { grantAndRedirect } from '@/lib/hotspot'
 
 export default function LeadCapturePortal({ portal, ctx }: { portal: CaptivePortal; ctx: PortalCtx }) {
   const [name,   setName]   = useState('')
@@ -36,9 +37,18 @@ export default function LeadCapturePortal({ portal, ctx }: { portal: CaptivePort
       gender: gender || undefined,
       macAddress: ctx.mac, ipAddress: ctx.ip,
     })
+    if (!ok && !ctx.isPreview) {
+      setLoading(false)
+      setError('Erro ao conectar. Tente novamente.')
+      return
+    }
+    try {
+      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+    } catch {
+      // grant failed but lead was saved — still show success
+    }
     setLoading(false)
-    if (ok || ctx.isPreview) setDone(true)
-    else setError('Erro ao conectar. Tente novamente.')
+    setDone(true)
   }
 
   if (done) return <PortalSuccess portal={portal} ctx={ctx} />
