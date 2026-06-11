@@ -73,7 +73,7 @@ export default function IspLoginPortal({ portal, ctx, plans = [] }: { portal: Ca
     const timer = setTimeout(async () => {
       const { status } = await checkPaymentStatus(paymentResult.transactionId)
       if (status === 'approved' || status === 'manual_approved') {
-        await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+        try { await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId) } catch { /* ignore redirect error, payment confirmed */ }
         setDone(true)
       } else {
         setPollingCount(c => c + 1)
@@ -423,7 +423,12 @@ function ClientStep({
     setLoading(false)
 
     if (result.granted) {
-      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+      try {
+        await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+      } catch {
+        setError('Contrato ativo, mas não foi possível liberar o acesso. Tente novamente.')
+        return
+      }
       setDone(true)
     } else if (result.suspended) {
       setDigits(d)
@@ -536,7 +541,7 @@ function SuspendedInvoiceStep({
         setCountdown(POLL_INTERVAL)
         ispLogin(ctx.portalId, { cpf, macAddress: ctx.mac, ipAddress: ctx.ip }).then(async result => {
           if (result.granted) {
-            await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
+            try { await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId) } catch { /* ignore */ }
             onGrantedRef.current()
           }
         })
