@@ -8,11 +8,10 @@
         "start": "next start",
         "test": "vitest",
         "test:run": "vitest run",
-        "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+        "type-check": "tsc --noEmit"
     },
     "dependencies": {
         "@hookform/resolvers": "^5.4.0",
-        "@opennextjs/cloudflare": "^1.19.11",
         "next": "16.2.7",
         "react": "19.2.4",
         "react-dom": "19.2.4",
@@ -21,8 +20,6 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@emnapi/core": "^1.11.0",
-        "@emnapi/runtime": "^1.11.0",
         "@tailwindcss/postcss": "^4",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.2",
@@ -33,7 +30,6 @@
         "jsdom": "^29.1.1",
         "tailwindcss": "^4",
         "typescript": "^5",
-        "vitest": "^4.1.8",
-        "wrangler": "^4.99.0"
+        "vitest": "^4.1.8"
     }
 }
