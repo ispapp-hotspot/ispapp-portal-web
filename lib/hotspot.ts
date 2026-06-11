@@ -12,8 +12,6 @@ export async function grantAndRedirect(
   link: string | undefined,
   portalId?: string,
 ): Promise<void> {
-  if (!link) return
-
   const res = await fetch(`${API_URL}/api/hotspot-grant`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -21,6 +19,8 @@ export async function grantAndRedirect(
   })
 
   if (!res.ok) throw new Error(`grant failed: ${res.status}`)
+
+  if (!link) return
 
   const { username, password } = await res.json()
   const loginUrl = new URL(link)
