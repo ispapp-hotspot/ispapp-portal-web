@@ -213,29 +213,77 @@ export function PortalPage({
         {children}
       </div>
 
-      {/* MAC / IP info — outside card */}
+      {/* MAC / IP — chips destacados */}
       {(mac || ip) && (
-        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 12, fontFamily: 'monospace', letterSpacing: '0.02em' }}>
-          {[mac, ip].filter(Boolean).join(' · ')}
-        </p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
+          {mac && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20,
+              padding: '4px 10px',
+            }}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="3" />
+                <path d="M8 10h8M8 14h4" />
+              </svg>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                MAC
+              </span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', fontFamily: 'monospace', fontWeight: 600 }}>
+                {mac.toUpperCase()}
+              </span>
+            </div>
+          )}
+          {ip && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20,
+              padding: '4px 10px',
+            }}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z" />
+              </svg>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                IP
+              </span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', fontFamily: 'monospace', fontWeight: 600 }}>
+                {ip}
+              </span>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Terms — outside card, on colored background */}
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 8, lineHeight: 1.5, maxWidth: 360 }}>
-        {termsText ?? (
-          <>
+      {/* Terms + Privacy links */}
+      <div style={{ textAlign: 'center', marginTop: 10, maxWidth: 360 }}>
+        {termsText ? (
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5, margin: 0 }}>
+            {termsText}
+          </p>
+        ) : (
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', lineHeight: 1.6, margin: 0 }}>
             Ao conectar você concorda com os{' '}
             <a
               href={`/${companyId}/legal`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'rgba(255,255,255,0.9)', textDecoration: 'underline' }}
+              style={{ color: '#fff', textDecoration: 'underline', fontWeight: 600 }}
             >
               Termos de Uso
             </a>
-          </>
+            {' e a '}
+            <a
+              href={`/${companyId}/legal`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#fff', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              Política de Privacidade
+            </a>
+          </p>
         )}
-      </p>
+      </div>
     </div>
   )
 }

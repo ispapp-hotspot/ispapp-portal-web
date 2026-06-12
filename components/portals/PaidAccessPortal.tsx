@@ -53,9 +53,15 @@ export default function PaidAccessPortal() {
   const [payLoading, setPayLoading] = useState(false)
   const [polling, setPolling]   = useState(false)
   const [error, setError]       = useState('')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [secondsLeft, setSecondsLeft] = useState(0)
+  const [totalSeconds, setTotalSeconds] = useState(0)
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+  useEffect(() => () => {
+    if (pollRef.current)      clearInterval(pollRef.current)
+    if (countdownRef.current) clearInterval(countdownRef.current)
+  }, [])
 
   const pageProps = {
     primaryColor: cfg.primaryColor,
@@ -106,6 +112,27 @@ export default function PaidAccessPortal() {
     setPayment(result)
     setStep('pix')
     startPolling(result.transactionId)
+    if (result.expiresAt) startCountdown(result.expiresAt)
+  }
+
+  function copyToClipboard(text: string) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+    } else {
+      fallbackCopy(text)
+    }
+  }
+
+  function fallbackCopy(text: string) {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    try { document.execCommand('copy') } catch { /* silent */ }
+    document.body.removeChild(el)
   }
 
   function startPolling(txId: string) {
@@ -114,11 +141,25 @@ export default function PaidAccessPortal() {
       const { status } = await checkPaymentStatus(txId)
       if (status === 'approved' || status === 'paid') {
         clearInterval(pollRef.current!)
+        if (countdownRef.current) clearInterval(countdownRef.current)
         setPolling(false)
         setStep('done')
         await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
       }
     }, 3000)
+  }
+
+  function startCountdown(expiresAt: string) {
+    const expiryMs = new Date(expiresAt).getTime()
+    const nowMs    = Date.now()
+    const total    = Math.max(0, Math.round((expiryMs - nowMs) / 1000))
+    setTotalSeconds(total)
+    setSecondsLeft(total)
+    countdownRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.round((expiryMs - Date.now()) / 1000))
+      setSecondsLeft(remaining)
+      if (remaining <= 0) clearInterval(countdownRef.current!)
+    }, 1000)
   }
 
   if (step === 'done') {
@@ -130,11 +171,41 @@ export default function PaidAccessPortal() {
   }
 
   if (step === 'pix' && payment) {
+    const mins = String(Math.floor(secondsLeft / 60)).padStart(2, '0')
+    const secs = String(secondsLeft % 60).padStart(2, '0')
+    const progress = totalSeconds > 0 ? secondsLeft / totalSeconds : 0
+    const expired  = secondsLeft <= 0 && totalSeconds > 0
+    const barColor = progress > 0.4 ? '#22c55e' : progress > 0.15 ? '#f59e0b' : '#ef4444'
+
     return (
       <PortalPage {...pageProps} title="Pagamento PIX">
-        <p style={{ textAlign: 'center', color: '#6b7280', margin: '0 0 14px', fontSize: 18, fontWeight: 700 }}>
+        <p style={{ textAlign: 'center', color: '#6b7280', margin: '0 0 10px', fontSize: 18, fontWeight: 700 }}>
           R$ {Number(payment.amount).toFixed(2)}
         </p>
+
+        {/* countdown + progress bar */}
+        {totalSeconds > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>
+                {expired ? 'PIX expirado' : 'Expira em'}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: expired ? '#ef4444' : barColor }}>
+                {expired ? '00:00' : `${mins}:${secs}`}
+              </span>
+            </div>
+            <div style={{ height: 6, borderRadius: 99, backgroundColor: '#e5e7eb', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${progress * 100}%`,
+                backgroundColor: barColor,
+                borderRadius: 99,
+                transition: 'width 1s linear, background-color 0.5s',
+              }} />
+            </div>
+          </div>
+        )}
+
         {error && <ErrorBox message={error} />}
         {payment.pixQrCodeBase64 && (
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
@@ -145,13 +216,18 @@ export default function PaidAccessPortal() {
         <div style={{ backgroundColor: '#f3f4f6', borderRadius: 8, padding: '8px 12px', fontFamily: 'monospace', fontSize: 10, wordBreak: 'break-all', marginBottom: 12, color: '#374151' }}>
           {payment.pixCopyPaste}
         </div>
-        <PortalButton color={cfg.buttonColor} onClick={async () => { await navigator.clipboard.writeText(payment.pixCopyPaste).catch(() => {}) }}>
+        <PortalButton color={cfg.buttonColor} onClick={() => copyToClipboard(payment.pixCopyPaste)}>
           Copiar código PIX
         </PortalButton>
-        {polling && (
+        {polling && !expired && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#6b7280', fontSize: 12, marginTop: 10 }}>
             <Spinner color="#9ca3af" size={14} />Aguardando pagamento…
           </div>
+        )}
+        {expired && (
+          <p style={{ textAlign: 'center', color: '#ef4444', fontSize: 12, marginTop: 10 }}>
+            O código PIX expirou. Volte e tente novamente.
+          </p>
         )}
       </PortalPage>
     )
