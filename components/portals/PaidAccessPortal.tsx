@@ -35,9 +35,10 @@ export default function PaidAccessPortal() {
   const { portal, companyId, mac, link, ip } = usePortal()
   const cfg = portal.config
 
-  const showEmail  = portalField(cfg, 'email')
-  const showCpf    = portalField(cfg, 'cpf')
-  const showPhone  = portalField(cfg, 'phone')
+  // PAID_ACCESS defaults: show all fields unless explicitly disabled
+  const showEmail  = cfg.showEmail  !== false
+  const showCpf    = cfg.showCpf    !== false
+  const showPhone  = cfg.showPhone  !== false
   const showGender = portalField(cfg, 'gender')
 
   const [step, setStep]         = useState<Step>('register')
