@@ -1,83 +1,123 @@
 'use client'
 
 import { useState } from 'react'
-import type { CaptivePortal } from '@/types'
-import type { PortalCtx } from './shared'
-import { PortalWrapper, PortalCard, PortalInput, PortalButton, PortalSuccess, PortalGenderSelect, formatCpf, formatPhone, validateEmail } from './shared'
-import { submitLead } from '@/lib/api'
 import { grantAndRedirect } from '@/lib/hotspot'
+import { submitLead } from '@/lib/api'
+import { portalField } from '@/types'
+import {
+  usePortal,
+  PortalPage,
+  PortalInput,
+  PortalButton,
+  PortalGenderSelect,
+  PortalSuccess,
+  ErrorBox,
+  formatCpf,
+  formatPhone,
+  validateEmail,
+} from './shared'
 
-export default function LeadCapturePortal({ portal, ctx }: { portal: CaptivePortal; ctx: PortalCtx }) {
-  const [name,   setName]   = useState('')
-  const [cpf,    setCpf]    = useState('')
-  const [email,  setEmail]  = useState('')
-  const [phone,  setPhone]  = useState('')
-  const [gender, setGender] = useState('')
-  const [error,  setError]  = useState('')
-  const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(false)
+export default function LeadCapturePortal() {
+  const { portal, companyId, mac, link, ip } = usePortal()
+  const cfg = portal.config
 
-  const btnColor = portal.config.buttonColor ?? '#10b981'
-  const showCpf   = portal.config.showCpf   !== false
-  const showEmail = portal.config.showEmail  !== false
-  const showPhone = portal.config.showPhone  !== false
+  const showCpf    = portalField(cfg, 'cpf')
+  const showEmail  = portalField(cfg, 'email')
+  const showPhone  = portalField(cfg, 'phone')
+  const showGender = portalField(cfg, 'gender')
 
-  async function handleSubmit() {
-    if (!name.trim()) { setError('Nome é obrigatório.'); return }
-    if (showEmail && email.trim() && !validateEmail(email)) {
-      setError('E-mail inválido.'); return
-    }
-    if (showEmail && showPhone && !email.trim() && !phone.trim()) {
-      setError('Informe pelo menos e-mail ou telefone.'); return
-    }
-    setError(''); setLoading(true)
-    const ok = await submitLead(ctx.portalId, {
-      name: name.trim(), cpf: cpf.trim() || undefined,
-      email: email.trim() || undefined, phone: phone.trim() || undefined,
-      gender: gender || undefined,
-      macAddress: ctx.mac, ipAddress: ctx.ip,
-    })
-    if (!ok && !ctx.isPreview) {
-      setLoading(false)
-      setError('Erro ao conectar. Tente novamente.')
-      return
-    }
-    try {
-      await grantAndRedirect(ctx.companyId, ctx.mac, ctx.link, ctx.portalId)
-    } catch {
-      // grant failed but lead was saved — still show success
-    }
-    setLoading(false)
-    setDone(true)
+  const [name, setName]         = useState('')
+  const [cpfDigits, setCpf]     = useState('')
+  const [email, setEmail]       = useState('')
+  const [phoneDigits, setPhone] = useState('')
+  const [gender, setGender]     = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+  const [done, setDone]         = useState(false)
+
+  function validate(): string | null {
+    if (!name.trim()) return 'Nome é obrigatório.'
+    if (showCpf && cpfDigits.length > 0 && cpfDigits.length < 11) return 'CPF inválido.'
+    if (showEmail && email && !validateEmail(email)) return 'E-mail inválido.'
+    return null
   }
 
-  if (done) return <PortalSuccess portal={portal} ctx={ctx} />
+  async function handleSubmit() {
+    const err = validate()
+    if (err) { setError(err); return }
+    setLoading(true)
+    setError('')
+    try {
+      await submitLead(portal.id, {
+        name: name.trim(),
+        cpf:    cpfDigits   || undefined,
+        email:  email       || undefined,
+        phone:  phoneDigits || undefined,
+        gender: gender      || undefined,
+        macAddress: mac     || undefined,
+        ipAddress:  ip,
+      })
+      setDone(true)
+      await grantAndRedirect(companyId, mac, link, portal.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao enviar. Tente novamente.')
+      setLoading(false)
+    }
+  }
+
+  const pageProps = {
+    primaryColor: cfg.primaryColor,
+    backgroundColor: cfg.backgroundColor,
+    logoUrl: cfg.logoUrl,
+    title: cfg.welcomeText,
+    subtitle: cfg.subtitle,
+    companyId,
+    termsText: cfg.termsText,
+    mac,
+    ip,
+  }
+
+  if (done) {
+    return (
+      <PortalPage {...pageProps}>
+        <PortalSuccess title="Conectado!" subtitle="Aproveite a internet." color={cfg.primaryColor} />
+      </PortalPage>
+    )
+  }
 
   return (
-    <PortalWrapper portal={portal} ctx={ctx}>
-      <PortalCard>
-        <PortalInput label="Nome" placeholder="Seu nome completo" value={name} onChange={setName} required icon={<UserIcon />} />
-        {showCpf   && <PortalInput label="CPF"      placeholder="000.000.000-00"  value={cpf}   onChange={v => setCpf(formatCpf(v))}     inputMode="numeric" icon={<IdIcon />} />}
-        {showEmail && <PortalInput label="Email"     placeholder="seu@email.com"   value={email} onChange={setEmail}                           type="email"        icon={<MailIcon />} />}
-        {showPhone && <PortalInput label="Telefone"  placeholder="(00) 00000-0000" value={phone} onChange={v => setPhone(formatPhone(v))}   inputMode="tel"     icon={<PhoneIcon />} />}
-        <PortalGenderSelect value={gender} onChange={setGender} />
-        {(showEmail || showPhone) && (
-          <p style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>Informe pelo menos telefone ou email</p>
-        )}
-        {error && <p style={{ fontSize: 12, color: '#ef4444', textAlign: 'center' }}>{error}</p>}
-        <PortalButton color={btnColor} onClick={handleSubmit} disabled={loading} type="button">
-          {loading ? <Spinner /> : null}
-          {loading ? 'Conectando...' : (portal.config.buttonText as string || 'Conectar à Internet')}
-        </PortalButton>
-      </PortalCard>
-    </PortalWrapper>
+    <PortalPage {...pageProps}>
+      {error && <ErrorBox message={error} />}
+      <PortalInput label="Nome *" value={name} onChange={setName} placeholder="Seu nome" disabled={loading} />
+      {showCpf && (
+        <PortalInput
+          label="CPF"
+          value={formatCpf(cpfDigits)}
+          onChange={v => setCpf(v.replace(/\D/g, '').slice(0, 11))}
+          placeholder="000.000.000-00"
+          inputMode="numeric"
+          disabled={loading}
+        />
+      )}
+      {showEmail && (
+        <PortalInput label="Email" value={email} onChange={setEmail} type="email" placeholder="seu@email.com" disabled={loading} />
+      )}
+      {showPhone && (
+        <PortalInput
+          label="Telefone"
+          value={formatPhone(phoneDigits)}
+          onChange={v => setPhone(v.replace(/\D/g, '').slice(0, 11))}
+          placeholder="(00) 00000-0000"
+          inputMode="tel"
+          disabled={loading}
+        />
+      )}
+      {showGender && (
+        <PortalGenderSelect value={gender} onChange={setGender} disabled={loading} />
+      )}
+      <PortalButton color={cfg.buttonColor} onClick={handleSubmit} loading={loading} disabled={!name.trim()}>
+        {cfg.buttonText ?? 'Conectar à Internet'}
+      </PortalButton>
+    </PortalPage>
   )
 }
-
-
-// ── Mini icons ────────────────────────────────────────────────────────────────
-function UserIcon()  { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> }
-function IdIcon()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 10h2m-2 4h2M6 10h6m-6 4h3"/></svg> }
-function MailIcon()  { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> }
-function PhoneIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.28h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l1.27-.85a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> }
-function Spinner() { return <svg className="animate-spin w-5 h-5 text-white" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> }

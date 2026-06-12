@@ -2,201 +2,189 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { CampaignData, CampaignMediaItem } from '@/types'
-import { recordCampaignView } from '@/lib/api'
 
 interface Props {
   campaign:  CampaignData
-  portalId:  string
-  companyId: string
-  mac:       string
-  ip:        string
   onFinish:  () => void
+  onView?:   (itemId: string) => void
 }
 
-export default function CampaignStories({ campaign, portalId, companyId, mac, ip, onFinish }: Props) {
-  const [current, setCurrent]   = useState(0)
-  const [progress, setProgress] = useState(0)   // 0–100 para a barra atual
-  const [paused, setPaused]     = useState(false)
-  const startRef   = useRef<number>(Date.now())
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+export default function CampaignStories({ campaign, onFinish, onView }: Props) {
+  const items   = campaign.media.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+  const total   = items.length
 
-  const media  = campaign.media
-  const item   = media[current] as CampaignMediaItem | undefined
-  const total  = media.length
-  const FPS    = 20
-  const TICK   = 1000 / FPS
+  const [idx, setIdx]         = useState(0)
+  const [paused, setPaused]   = useState(false)
+  const [progress, setProgress] = useState(0)
 
-  // ── Registra visualização quando troca de slide ───────────────────────────
-  useEffect(() => {
-    if (!item) return
-    recordCampaignView({
-      campaignId: campaign.id, mediaId: item.id,
-      portalId, companyId, macAddress: mac, ipAddress: ip,
-      action: 'viewed', durationWatchedSec: 0,
-    })
-    startRef.current = Date.now()
-  }, [current])
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startRef  = useRef<number>(0)
+  const elapsedRef = useRef<number>(0)
 
-  // ── Progress bar ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!item) return
-    setProgress(0)
-    if (intervalRef.current) clearInterval(intervalRef.current)
+  const current: CampaignMediaItem = items[idx]
 
-    intervalRef.current = setInterval(() => {
-      if (paused) return
-      const elapsed = Date.now() - startRef.current
-      const pct     = Math.min((elapsed / (item.durationSec * 1000)) * 100, 100)
-      setProgress(pct)
-      if (pct >= 100) advance()
-    }, TICK)
-
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [current, paused, item])
-
-  const advance = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    const watched = Math.round((Date.now() - startRef.current) / 1000)
-    if (item) {
-      recordCampaignView({
-        campaignId: campaign.id, mediaId: item.id,
-        portalId, companyId, macAddress: mac, ipAddress: ip,
-        action: current === total - 1 ? 'completed' : 'viewed',
-        durationWatchedSec: watched,
-      })
-    }
-    if (current < total - 1) {
-      setCurrent(c => c + 1)
-    } else {
+  const goNext = useCallback(() => {
+    if (idx + 1 >= total) {
       onFinish()
+    } else {
+      onView?.(current.id)
+      setIdx(i => i + 1)
+      setProgress(0)
+      elapsedRef.current = 0
     }
-  }, [current, total, item])
+  }, [idx, total, current, onFinish, onView])
 
-  function skip() {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    const watched = Math.round((Date.now() - startRef.current) / 1000)
-    if (item) {
-      recordCampaignView({
-        campaignId: campaign.id, mediaId: item.id,
-        portalId, companyId, macAddress: mac, ipAddress: ip,
-        action: 'skipped', durationWatchedSec: watched,
-      })
+  // tick
+  useEffect(() => {
+    if (paused) {
+      if (timerRef.current) clearInterval(timerRef.current)
+      return
     }
-    onFinish()
+    const duration = current.durationSec * 1000
+    startRef.current = Date.now() - elapsedRef.current
+
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startRef.current
+      elapsedRef.current = elapsed
+      const pct = Math.min(elapsed / duration, 1)
+      setProgress(pct)
+      if (pct >= 1) {
+        clearInterval(timerRef.current!)
+        goNext()
+      }
+    }, 50)
+
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [idx, paused, current, goNext])
+
+  function handlePointerDown(e: React.PointerEvent) {
+    e.preventDefault()
+    setPaused(true)
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    e.preventDefault()
+    setPaused(false)
   }
 
   function handleTap(e: React.MouseEvent<HTMLDivElement>) {
-    const rect  = e.currentTarget.getBoundingClientRect()
-    const tapX  = e.clientX - rect.left
-    const third = rect.width / 3
-    if (tapX < third) {
-      // Tap esquerdo → slide anterior
-      if (current > 0) { setCurrent(c => c - 1); setProgress(0) }
-    } else if (tapX > third * 2) {
-      // Tap direito → próximo
-      advance()
+    const x = e.clientX
+    const w = (e.currentTarget as HTMLDivElement).offsetWidth
+    if (x < w * 0.33) {
+      // prev
+      if (idx > 0) {
+        setIdx(i => i - 1)
+        setProgress(0)
+        elapsedRef.current = 0
+      } else {
+        setProgress(0)
+        elapsedRef.current = 0
+      }
+    } else if (x > w * 0.67) {
+      // next
+      goNext()
     }
-    // Tap centro → toggle pause
-    else setPaused(p => !p)
+    // center: pause already handled by pointer events
   }
-
-  if (!item) { onFinish(); return null }
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black flex flex-col select-none"
-      onMouseDown={() => setPaused(true)}
-      onMouseUp={() => setPaused(false)}
-      onTouchStart={() => setPaused(true)}
-      onTouchEnd={() => setPaused(false)}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#000',
+        zIndex: 9999,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
       onClick={handleTap}
     >
-      {/* ── Progress bars ── */}
+      {/* Progress bars */}
       <div
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-          display: 'flex', gap: 4, padding: '12px 12px 0',
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          right: 12,
+          display: 'flex',
+          gap: 4,
+          zIndex: 2,
         }}
       >
-        {media.map((_, i) => (
+        {items.map((item, i) => (
           <div
-            key={i}
+            key={item.id}
             style={{
-              flex: 1, height: 3, borderRadius: 2,
-              backgroundColor: 'rgba(255,255,255,0.3)',
+              flex: 1,
+              height: 3,
+              backgroundColor: 'rgba(255,255,255,0.4)',
+              borderRadius: 2,
               overflow: 'hidden',
             }}
           >
             <div
               style={{
                 height: '100%',
-                borderRadius: 2,
                 backgroundColor: '#fff',
-                width: i < current ? '100%' : i === current ? `${progress}%` : '0%',
-                transition: i === current ? 'none' : undefined,
+                borderRadius: 2,
+                width:
+                  i < idx
+                    ? '100%'
+                    : i === idx
+                    ? `${progress * 100}%`
+                    : '0%',
+                transition: i === idx && !paused ? 'none' : undefined,
               }}
             />
           </div>
         ))}
       </div>
 
-      {/* ── Skip button ── */}
+      {/* Skip button */}
       <button
-        onClick={e => { e.stopPropagation(); skip() }}
+        onClick={e => { e.stopPropagation(); onFinish() }}
         style={{
-          position: 'absolute', top: 28, right: 16, zIndex: 20,
-          background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)',
-          borderRadius: 20, padding: '4px 14px',
-          color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          position: 'absolute',
+          top: 28,
+          right: 16,
+          zIndex: 3,
+          background: 'rgba(0,0,0,0.4)',
+          border: 'none',
+          color: '#fff',
+          fontSize: 13,
+          fontWeight: 600,
+          padding: '4px 12px',
+          borderRadius: 20,
+          cursor: 'pointer',
         }}
       >
-        Pular →
+        Pular
       </button>
 
-      {/* ── Media ── */}
-      {item.type === 'video' ? (
-        <video
-          key={item.id}
-          src={item.url}
-          autoPlay
-          muted
-          playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          onEnded={advance}
-        />
-      ) : (
-        <img
-          key={item.id}
-          src={item.url}
-          alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          draggable={false}
-        />
-      )}
-
-      {/* ── Pause indicator ── */}
-      {paused && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
-        }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 24,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ color: '#fff', fontSize: 20 }}>⏸</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Counter ── */}
-      <div style={{
-        position: 'absolute', bottom: 20, left: 0, right: 0,
-        textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 11,
-        pointerEvents: 'none',
-      }}>
-        {current + 1} / {total}
+      {/* Media */}
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {current.type === 'video' ? (
+          <video
+            key={current.id}
+            src={current.url}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={current.id}
+            src={current.url}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            draggable={false}
+          />
+        )}
       </div>
     </div>
   )

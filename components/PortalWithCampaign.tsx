@@ -1,82 +1,73 @@
 'use client'
 
 import { useState } from 'react'
-import type { CaptivePortal, CampaignData, HotspotPlan } from '@/types'
-import CampaignStories from './CampaignStories'
-import LeadCapturePortal from './portals/LeadCapturePortal'
-import LoginCpfPortal    from './portals/LoginCpfPortal'
-import PaidAccessPortal  from './portals/PaidAccessPortal'
-import FreeAccessPortal  from './portals/FreeAccessPortal'
-import IspLoginPortal    from './portals/IspLoginPortal'
-import type { PortalCtx } from './portals/shared'
+import dynamic from 'next/dynamic'
+import type { CaptivePortal, CampaignData } from '@/types'
+import { PortalProvider } from './portals/shared'
+import { recordCampaignView } from '@/lib/api'
+
+const CampaignStories   = dynamic(() => import('./CampaignStories'))
+const FreeAccessPortal  = dynamic(() => import('./portals/FreeAccessPortal'))
+const LoginCpfPortal    = dynamic(() => import('./portals/LoginCpfPortal'))
+const LeadCapturePortal = dynamic(() => import('./portals/LeadCapturePortal'))
+const PaidAccessPortal  = dynamic(() => import('./portals/PaidAccessPortal'))
+const IspLoginPortal    = dynamic(() => import('./portals/IspLoginPortal'))
 
 interface Props {
-  portal:      CaptivePortal
-  campaign:    CampaignData | null
-  companyName: string
-  companyId:   string
-  portalId:    string
-  mac:         string
-  ip:          string
-  link?:       string
-  isPreview:   boolean
-  pageBg:      string
-  plans?:      HotspotPlan[]
+  portal:       CaptivePortal
+  companyId:    string
+  mac:          string
+  link?:        string
+  ip?:          string
+  campaign:     CampaignData | null
+  companyName?: string
 }
 
 export default function PortalWithCampaign({
-  portal, campaign, companyName, companyId, portalId, mac, ip, link, isPreview, pageBg, plans = [],
+  portal, companyId, mac, link, ip, campaign,
 }: Props) {
-  const [showPortal, setShowPortal] = useState(!campaign || campaign.media.length === 0)
+  const hasCampaign = campaign && campaign.media.length > 0
+  const [showCampaign, setShowCampaign] = useState(hasCampaign)
 
-  const ctx: PortalCtx = { mac, ip, companyId, portalId, isPreview, companyName, link }
+  function handleCampaignFinish() {
+    setShowCampaign(false)
+  }
 
-  if (!showPortal && campaign && campaign.media.length > 0) {
+  function handleCampaignView(mediaId: string) {
+    if (!campaign) return
+    recordCampaignView(companyId, campaign.id, portal.id, mac, ip)
+    void mediaId
+  }
+
+  const ctxValue = { portal, companyId, mac, link, ip }
+
+  if (showCampaign && campaign) {
     return (
-      <>
-        {isPreview && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-            backgroundColor: '#f59e0b', color: '#78350f',
-            fontSize: 12, fontWeight: 600, textAlign: 'center', padding: '6px',
-          }}>
-            Modo Preview — não visível para usuários reais
-          </div>
-        )}
-        <CampaignStories
-          campaign={campaign}
-          portalId={portalId}
-          companyId={companyId}
-          mac={mac}
-          ip={ip}
-          onFinish={() => setShowPortal(true)}
-        />
-      </>
+      <CampaignStories
+        campaign={campaign}
+        onFinish={handleCampaignFinish}
+        onView={handleCampaignView}
+      />
     )
   }
 
+  const PortalComponent = resolvePortal(portal.type)
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: pageBg }}>
-      {isPreview && (
-        <div style={{
-          width: '100%', backgroundColor: '#f59e0b', color: '#78350f',
-          fontSize: 12, fontWeight: 600, textAlign: 'center', padding: '6px 0',
-        }}>
-          Modo Preview — não visível para usuários reais
-        </div>
-      )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 16px 32px' }}>
-        <div style={{ width: '100%', maxWidth: 440 }}>
-          {portal.type === 'LEAD_CAPTURE' && <LeadCapturePortal portal={portal} ctx={ctx} />}
-          {portal.type === 'LOGIN_CPF'    && <LoginCpfPortal    portal={portal} ctx={ctx} />}
-          {portal.type === 'PAID_ACCESS'  && <PaidAccessPortal  portal={portal} ctx={ctx} />}
-          {portal.type === 'FREE_ACCESS'  && <FreeAccessPortal  portal={portal} ctx={ctx} />}
-          {portal.type === 'ISP_LOGIN'    && <IspLoginPortal    portal={portal} ctx={ctx} plans={plans} />}
-          {!['LEAD_CAPTURE','LOGIN_CPF','PAID_ACCESS','FREE_ACCESS','ISP_LOGIN'].includes(portal.type) && (
-            <FreeAccessPortal portal={portal} ctx={ctx} />
-          )}
-        </div>
-      </div>
-    </div>
+    <PortalProvider value={ctxValue}>
+      <PortalComponent />
+    </PortalProvider>
   )
+}
+
+function resolvePortal(type: CaptivePortal['type']) {
+  switch (type) {
+    case 'FREE_ACCESS':   return FreeAccessPortal
+    case 'LOGIN_CPF':     return LoginCpfPortal
+    case 'LEAD_CAPTURE':  return LeadCapturePortal
+    case 'PAID_ACCESS':   return PaidAccessPortal
+    case 'ISP_LOGIN':     return IspLoginPortal
+    case 'VOUCHER':       return IspLoginPortal
+    default:              return FreeAccessPortal
+  }
 }

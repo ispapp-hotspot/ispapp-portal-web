@@ -1,7 +1,7 @@
 export default function Home() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <p className="text-gray-400 text-sm">IspApp Portal</p>
-    </div>
+    <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+      <p style={{ color: '#888', fontFamily: 'monospace' }}>ispapp hotspot portal</p>
+    </main>
   )
 }

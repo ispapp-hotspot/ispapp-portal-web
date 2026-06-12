@@ -3,19 +3,16 @@ export interface PortalConfig {
   subtitle?:       string
   buttonText?:     string
   termsText?:      string
-  primaryColor:    string
-  backgroundColor: string
+  primaryColor:    string   // page/header background
+  backgroundColor: string   // card background
   buttonColor:     string
   textColor:       string
   logoUrl?:        string
+  // Fields can be stored as booleans (dashboard) or array (legacy)
   showCpf?:        boolean
   showEmail?:      boolean
   showPhone?:      boolean
-  paymentMock?:    boolean
-  showSuspendedInvoice?: boolean
-  bandwidthUp?:    number
-  bandwidthDown?:  number
-  durationMin?:    number
+  fields?:         string[]
   [key: string]:   unknown
 }
 
@@ -23,7 +20,7 @@ export interface CaptivePortal {
   id:        string
   companyId: string
   name:      string
-  type:      'LEAD_CAPTURE' | 'LOGIN_CPF' | 'PAID_ACCESS' | 'FREE_ACCESS' | 'VOUCHER' | 'ISP_LOGIN'
+  type:      'FREE_ACCESS' | 'LOGIN_CPF' | 'LEAD_CAPTURE' | 'PAID_ACCESS' | 'ISP_LOGIN' | 'VOUCHER'
   config:    PortalConfig
   active:    boolean
 }
@@ -57,11 +54,25 @@ export interface CampaignMediaItem {
 }
 
 export interface LeadPayload {
-  name:       string
-  cpf?:       string
-  email?:     string
-  phone?:     string
-  gender?:    string
+  name:        string
+  cpf?:        string
+  email?:      string
+  phone?:      string
+  gender?:     string
   macAddress?: string
   ipAddress?:  string
+}
+
+/**
+ * Check if a field is enabled in portal config.
+ * Supports both boolean flags (showCpf) and fields array (["cpf","email"]).
+ */
+export function portalField(config: PortalConfig, field: string): boolean {
+  // Boolean format (dashboard saves this way)
+  const boolKey = `show${field.charAt(0).toUpperCase()}${field.slice(1)}` as keyof PortalConfig
+  if (typeof config[boolKey] === 'boolean') return config[boolKey] as boolean
+  // Array format (legacy / API-generated)
+  if (Array.isArray(config.fields)) return config.fields.includes(field)
+  // Default: show all common fields
+  return false
 }
