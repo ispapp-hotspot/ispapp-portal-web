@@ -132,7 +132,8 @@ export default function IspLoginPortal() {
       return
     }
     setLoading(true)
-    const result = await initiatePayment(portal.id, plan.id, mac, ip)
+    const result = await initiatePayment(portal.id, plan.id, mac, ip,
+      name || undefined, leadCpfDigits || undefined, email || undefined, phoneDigits || undefined)
     setLoading(false)
     if (result.error) { setError(result.error); return }
     setPayment(result)
