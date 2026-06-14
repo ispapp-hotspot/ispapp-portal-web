@@ -10,6 +10,7 @@ import {
   useFreePlan,
   redeemVoucher,
   submitLead,
+  lookupLeadByCpf,
   type IspLoginResult,
   type InitiatePaymentResult,
 } from '@/lib/api'
@@ -28,17 +29,18 @@ import {
   formatCpfCnpj,
   formatPhone,
   validateEmail,
+  validateCpf,
   fmtDuration,
   fmtSpeed,
 } from './shared'
 
-type Step = 'choose' | 'client' | 'suspended' | 'lead' | 'plans' | 'pix' | 'voucher' | 'done'
+type Step = 'cpf' | 'suspended' | 'lead' | 'plans' | 'pix' | 'voucher' | 'done'
 
 export default function IspLoginPortal() {
   const { portal, companyId, mac, link, ip } = usePortal()
   const cfg = portal.config
 
-  const [step, setStep]           = useState<Step>('choose')
+  const [step, setStep]           = useState<Step>('cpf')
   const [cpfCnpjDigits, setCpfCnpj] = useState('')
   const [ispResult, setIspResult] = useState<IspLoginResult | null>(null)
   const [name, setName]           = useState('')
@@ -72,6 +74,7 @@ export default function IspLoginPortal() {
   async function handleClientLogin() {
     const raw = cpfCnpjDigits.replace(/\D/g, '')
     if (raw.length < 11) { setError('CPF ou CNPJ inválido.'); return }
+    if (raw.length === 11 && !validateCpf(raw)) { setError('CPF inválido. Verifique os dígitos.'); return }
     setLoading(true)
     setError('')
     const result = await ispLogin(portal.id, raw, mac, ip)
@@ -88,8 +91,25 @@ export default function IspLoginPortal() {
       setLoading(false)
       return
     }
+    // ERP não encontrou — busca lead interno pelo CPF (somente para CPF de 11 dígitos)
+    if (raw.length === 11) {
+      const lookup = await lookupLeadByCpf(portal.id, raw)
+      if (lookup.found) {
+        if (lookup.name)   setName(lookup.name)
+        if (lookup.email)  setEmail(lookup.email)
+        if (lookup.phone)  setPhone(lookup.phone)
+        if (lookup.gender) setGender(lookup.gender)
+        setLeadCpf(raw)
+        const fetched = await getPlansClient(companyId)
+        setPlans(fetched.filter(p => p.active))
+        setLoading(false)
+        setStep('plans')
+        return
+      }
+    }
+    setLeadCpf(raw.length === 11 ? raw : '')
     setLoading(false)
-    setError(result.error ?? 'Nenhum contrato ativo encontrado. Verifique o CPF/CNPJ ou entre em contato com o provedor.')
+    setStep('lead')
   }
 
   async function handleLeadSubmit() {
@@ -218,7 +238,7 @@ export default function IspLoginPortal() {
             {ispResult?.error ?? 'Entre em contato com o provedor.'}
           </p>
         )}
-        <BackButton onClick={() => { setStep('choose'); setCpfCnpj(''); setIspResult(null) }} />
+        <BackButton onClick={() => { setStep('cpf'); setCpfCnpj(''); setIspResult(null) }} />
       </PortalPage>
     )
   }
@@ -254,7 +274,7 @@ export default function IspLoginPortal() {
           </button>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <BackButton onClick={() => setStep('choose')} />
+          <BackButton onClick={() => setStep('cpf')} />
           <button onClick={() => setStep('voucher')}
             style={{ flex: 1, background: 'none', border: 'none', color: cfg.primaryColor, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: '4px 0' }}>
             Tenho um voucher
@@ -286,26 +306,6 @@ export default function IspLoginPortal() {
     )
   }
 
-  if (step === 'client') {
-    return (
-      <PortalPage {...pageProps} subtitle="Digite seu CPF ou CNPJ">
-        {error && <ErrorBox message={error} />}
-        <PortalInput
-          label="CPF / CNPJ"
-          value={formatCpfCnpj(cpfCnpjDigits)}
-          onChange={v => setCpfCnpj(v.replace(/\D/g, '').slice(0, 14))}
-          placeholder="000.000.000-00"
-          inputMode="numeric"
-          disabled={loading}
-        />
-        <PortalButton color={cfg.buttonColor} onClick={handleClientLogin} loading={loading} disabled={cpfCnpjDigits.replace(/\D/g, '').length < 11}>
-          Entrar
-        </PortalButton>
-        <BackButton onClick={() => { setStep('choose'); setError('') }} />
-      </PortalPage>
-    )
-  }
-
   if (step === 'lead') {
     return (
       <PortalPage {...pageProps} subtitle="Preencha seus dados para acessar">
@@ -318,33 +318,31 @@ export default function IspLoginPortal() {
         <PortalButton color={cfg.buttonColor} onClick={handleLeadSubmit} loading={loading} disabled={!name.trim()}>
           Escolher um plano
         </PortalButton>
-        <BackButton onClick={() => { setStep('choose'); setError('') }} />
+        <BackButton onClick={() => { setCpfCnpj(''); setError(''); setStep('cpf') }} />
       </PortalPage>
     )
   }
 
-  // step === 'choose' — matches dashboard preview exactly
+  // step === 'cpf' — tela inicial, CPF-first
   return (
-    <PortalPage {...pageProps} subtitle={cfg.subtitle ?? 'Clientes têm acesso imediato à internet'}>
-      <p style={{ textAlign: 'center', fontWeight: 600, fontSize: 13, color: '#374151', margin: '0 0 12px' }}>
-        Você já é cliente do provedor?
-      </p>
-      <PortalButton color={cfg.buttonColor} onClick={() => { setError(''); setStep('client') }}>
-        ✓ Sim, sou cliente
-      </PortalButton>
-      <button
-        onClick={() => { setError(''); setStep('lead') }}
-        style={{
-          width: '100%', padding: '11px 16px', marginTop: 8, fontSize: 14, fontWeight: 600,
-          color: '#374151', backgroundColor: '#fff', border: '1.5px solid #e5e7eb',
-          borderRadius: 8, cursor: 'pointer',
-        }}
+    <PortalPage {...pageProps} subtitle={cfg.subtitle ?? 'Digite seu CPF para continuar'}>
+      {error && <ErrorBox message={error} />}
+      <PortalInput
+        label="CPF / CNPJ"
+        value={formatCpfCnpj(cpfCnpjDigits)}
+        onChange={v => { setCpfCnpj(v.replace(/\D/g, '').slice(0, 14)); setError('') }}
+        placeholder="000.000.000-00"
+        inputMode="numeric"
+        disabled={loading}
+      />
+      <PortalButton
+        color={cfg.buttonColor}
+        onClick={handleClientLogin}
+        loading={loading}
+        disabled={cpfCnpjDigits.replace(/\D/g, '').length < 11}
       >
-        + Não, quero me cadastrar
-      </button>
-      <p style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', marginTop: 8, marginBottom: 0 }}>
-        Clientes com contrato ativo têm acesso imediato.
-      </p>
+        {cfg.buttonText ?? 'Continuar'}
+      </PortalButton>
     </PortalPage>
   )
 }

@@ -206,6 +206,31 @@ export async function useFreePlan(
   return res.json()
 }
 
+export interface LookupLeadResult {
+  found:   boolean
+  name?:   string
+  email?:  string
+  phone?:  string
+  gender?: string
+}
+
+export async function lookupLeadByCpf(
+  portalId: string,
+  cpf: string,
+): Promise<LookupLeadResult> {
+  try {
+    const res = await fetch(`/api/v1/public/portal/${portalId}/lookup-lead`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpf }),
+    })
+    if (!res.ok) return { found: false }
+    return res.json()
+  } catch {
+    return { found: false }
+  }
+}
+
 export async function redeemVoucher(
   portalId: string,
   code: string,

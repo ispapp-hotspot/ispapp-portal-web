@@ -7,6 +7,7 @@ import {
   initiatePayment,
   checkPaymentStatus,
   useFreePlan,
+  lookupLeadByCpf,
   type InitiatePaymentResult,
 } from '@/lib/api'
 import { portalField } from '@/types'
@@ -25,11 +26,12 @@ import {
   formatCpf,
   formatPhone,
   validateEmail,
+  validateCpf,
   fmtDuration,
   fmtSpeed,
 } from './shared'
 
-type Step = 'register' | 'plans' | 'pix' | 'done'
+type Step = 'cpf' | 'register' | 'plans' | 'pix' | 'done'
 
 export default function PaidAccessPortal() {
   const { portal, companyId, mac, link, ip } = usePortal()
@@ -41,7 +43,7 @@ export default function PaidAccessPortal() {
   const showPhone  = cfg.showPhone  !== false
   const showGender = portalField(cfg, 'gender')
 
-  const [step, setStep]         = useState<Step>('register')
+  const [step, setStep]         = useState<Step>('cpf')
   const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [cpfDigits, setCpf]     = useState('')
@@ -73,6 +75,27 @@ export default function PaidAccessPortal() {
     termsText: cfg.termsText,
     mac,
     ip,
+  }
+
+  async function handleCpfSubmit() {
+    const cpfRaw = cpfDigits.replace(/\D/g, '')
+    if (!validateCpf(cpfRaw)) { setError('CPF inválido. Verifique os dígitos.'); return }
+    setError('')
+    setLoadingPlans(true)
+    const lookup = await lookupLeadByCpf(portal.id, cpfRaw)
+    if (lookup.found) {
+      if (lookup.name)   setName(lookup.name)
+      if (lookup.email)  setEmail(lookup.email)
+      if (lookup.phone)  setPhone(lookup.phone.replace(/\D/g, ''))
+      if (lookup.gender) setGender(lookup.gender)
+      const fetched = await getPlansClient(companyId)
+      setPlans(fetched.filter(p => p.active))
+      setLoadingPlans(false)
+      setStep('plans')
+      return
+    }
+    setLoadingPlans(false)
+    setStep('register')
   }
 
   async function handleRegister() {
@@ -266,29 +289,53 @@ export default function PaidAccessPortal() {
             </div>
           </button>
         ))}
-        <BackButton onClick={() => setStep('register')} />
+        <BackButton onClick={() => setStep('cpf')} />
       </PortalPage>
     )
   }
 
+  if (step === 'register') {
+    return (
+      <PortalPage {...pageProps}>
+        {error && <ErrorBox message={error} />}
+        <PortalInput label="Nome *" value={name} onChange={setName} placeholder="Seu nome" disabled={loadingPlans} />
+        {showEmail && (
+          <PortalInput label="Email" value={email} onChange={setEmail} type="email" placeholder="seu@email.com" disabled={loadingPlans} />
+        )}
+        <PortalInput label="CPF" value={formatCpf(cpfDigits)} onChange={() => {}} placeholder="000.000.000-00" inputMode="numeric" disabled />
+        {showPhone && (
+          <PortalInput label="Telefone" value={formatPhone(phoneDigits)} onChange={v => setPhone(v.replace(/\D/g, '').slice(0, 11))} placeholder="(00) 00000-0000" inputMode="tel" disabled={loadingPlans} />
+        )}
+        {showGender && (
+          <PortalGenderSelect value={gender} onChange={setGender} disabled={loadingPlans} />
+        )}
+        <PortalButton color={cfg.buttonColor} onClick={handleRegister} loading={loadingPlans} disabled={!name.trim()}>
+          {cfg.buttonText ?? 'Ver planos'}
+        </PortalButton>
+        <BackButton onClick={() => { setError(''); setStep('cpf') }} />
+      </PortalPage>
+    )
+  }
+
+  // step === 'cpf' — tela inicial
   return (
     <PortalPage {...pageProps}>
       {error && <ErrorBox message={error} />}
-      <PortalInput label="Nome *" value={name} onChange={setName} placeholder="Seu nome" disabled={loadingPlans} />
-      {showEmail && (
-        <PortalInput label="Email" value={email} onChange={setEmail} type="email" placeholder="seu@email.com" disabled={loadingPlans} />
-      )}
-      {showCpf && (
-        <PortalInput label="CPF" value={formatCpf(cpfDigits)} onChange={v => setCpf(v.replace(/\D/g, '').slice(0, 11))} placeholder="000.000.000-00" inputMode="numeric" disabled={loadingPlans} />
-      )}
-      {showPhone && (
-        <PortalInput label="Telefone" value={formatPhone(phoneDigits)} onChange={v => setPhone(v.replace(/\D/g, '').slice(0, 11))} placeholder="(00) 00000-0000" inputMode="tel" disabled={loadingPlans} />
-      )}
-      {showGender && (
-        <PortalGenderSelect value={gender} onChange={setGender} disabled={loadingPlans} />
-      )}
-      <PortalButton color={cfg.buttonColor} onClick={handleRegister} loading={loadingPlans} disabled={!name.trim()}>
-        {cfg.buttonText ?? 'Ver planos'}
+      <PortalInput
+        label="CPF"
+        value={formatCpf(cpfDigits)}
+        onChange={v => { setCpf(v.replace(/\D/g, '').slice(0, 11)); setError('') }}
+        placeholder="000.000.000-00"
+        inputMode="numeric"
+        disabled={loadingPlans}
+      />
+      <PortalButton
+        color={cfg.buttonColor}
+        onClick={handleCpfSubmit}
+        loading={loadingPlans}
+        disabled={cpfDigits.replace(/\D/g, '').length < 11}
+      >
+        Continuar
       </PortalButton>
     </PortalPage>
   )
