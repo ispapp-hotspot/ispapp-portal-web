@@ -15,7 +15,7 @@ export default function FreeAccessPortal() {
     setLoading(true)
     setError('')
     try {
-      await grantAndRedirect(companyId, mac, link, portal.id)
+      await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao conectar. Tente novamente.')
       setLoading(false)

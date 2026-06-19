@@ -8,6 +8,7 @@ export interface PortalConfig {
   buttonColor:     string
   textColor:       string
   logoUrl?:        string
+  redirectUrl?:    string
   // Fields can be stored as booleans (dashboard) or array (legacy)
   showCpf?:        boolean
   showEmail?:      boolean

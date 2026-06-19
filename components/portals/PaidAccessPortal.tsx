@@ -123,7 +123,7 @@ export default function PaidAccessPortal() {
         return
       }
       setStep('done')
-      await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
+      await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined).catch(() => {})
       return
     }
     setPayLoading(true)
@@ -168,7 +168,7 @@ export default function PaidAccessPortal() {
         if (countdownRef.current) clearInterval(countdownRef.current)
         setPolling(false)
         setStep('done')
-        await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
+        await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined).catch(() => {})
       }
     }, 3000)
   }

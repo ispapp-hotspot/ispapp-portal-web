@@ -83,7 +83,7 @@ export default function IspLoginPortal() {
     if (result.granted) {
       try {
         const creds = result.username ? { username: result.username, password: result.password! } : undefined
-        await grantAndRedirect(companyId, mac, link, portal.id, creds)
+        await grantAndRedirect(companyId, mac, link, portal.id, creds, cfg.redirectUrl || undefined)
         setStep('done')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Acesso autorizado mas não foi possível conectar. Tente novamente.')
@@ -148,7 +148,7 @@ export default function IspLoginPortal() {
         return
       }
       setStep('done')
-      await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
+      await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined).catch(() => {})
       return
     }
     setLoading(true)
@@ -169,7 +169,7 @@ export default function IspLoginPortal() {
         clearInterval(pollRef.current!)
         setPolling(false)
         setStep('done')
-        await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
+        await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined).catch(() => {})
       }
     }, 3000)
   }
@@ -297,7 +297,7 @@ export default function IspLoginPortal() {
           setLoading(false)
           if (!result.granted) { setError(result.error ?? 'Voucher inválido.'); return }
           setStep('done')
-          await grantAndRedirect(companyId, mac, link, portal.id).catch(() => {})
+          await grantAndRedirect(companyId, mac, link, portal.id, undefined, cfg.redirectUrl || undefined).catch(() => {})
         }} loading={loading} disabled={!voucherCode.trim()}>
           Resgatar
         </PortalButton>

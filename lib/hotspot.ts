@@ -6,6 +6,7 @@ export async function grantAndRedirect(
   link: string | undefined,
   portalId?: string,
   preComputedCredentials?: { username: string; password: string },
+  redirectUrl?: string,
 ): Promise<void> {
   let username: string
   let password: string
@@ -30,5 +31,6 @@ export async function grantAndRedirect(
   const loginUrl = new URL(link)
   loginUrl.searchParams.set('username', username)
   loginUrl.searchParams.set('password', password)
+  if (redirectUrl) loginUrl.searchParams.set('dst', redirectUrl)
   window.location.href = loginUrl.toString()
 }
